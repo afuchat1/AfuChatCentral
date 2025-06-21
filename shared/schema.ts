@@ -34,6 +34,7 @@ export const users = pgTable("users", {
   profileImageUrl: varchar("profile_image_url"),
   username: varchar("username").unique(),
   bio: text("bio"),
+  role: varchar("role").default("user"), // user, admin, moderator
   isVerified: boolean("is_verified").default(false),
   isPremium: boolean("is_premium").default(false),
   country: varchar("country").default("US"),
@@ -44,7 +45,7 @@ export const users = pgTable("users", {
   advertisingBalance: decimal("advertising_balance", { precision: 10, scale: 2 }).default("0.00"),
   referralPoints: integer("referral_points").default(0),
   referralCode: varchar("referral_code").unique(),
-  referredBy: varchar("referred_by").references(() => users.id),
+  referredBy: varchar("referred_by").references((): any => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -214,6 +215,36 @@ export const analytics = pgTable("analytics", {
   date: timestamp("date").defaultNow(),
 });
 
+// Reports table for moderation
+export const reports = pgTable("reports", {
+  id: serial("id").primaryKey(),
+  reporterId: varchar("reporter_id").notNull().references(() => users.id),
+  reportedUserId: varchar("reported_user_id").references(() => users.id),
+  reportedPostId: integer("reported_post_id").references(() => posts.id),
+  reportedMessageId: integer("reported_message_id").references(() => messages.id),
+  reportedProductId: integer("reported_product_id").references(() => products.id),
+  category: varchar("category").notNull(), // spam, harassment, inappropriate_content, etc
+  reason: text("reason").notNull(),
+  status: varchar("status").default("pending"), // pending, reviewed, dismissed, action_taken
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  actionTaken: varchar("action_taken"), // warning, content_removed, user_banned, etc
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// User bans table
+export const userBans = pgTable("user_bans", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  bannedBy: varchar("banned_by").notNull().references(() => users.id),
+  reason: text("reason").notNull(),
+  banType: varchar("ban_type").default("temporary"), // temporary, permanent
+  durationHours: integer("duration_hours"),
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   posts: many(posts),
@@ -285,6 +316,41 @@ export const commentsRelations = relations(comments, ({ one }) => ({
   }),
 }));
 
+export const reportsRelations = relations(reports, ({ one }) => ({
+  reporter: one(users, {
+    fields: [reports.reporterId],
+    references: [users.id],
+    relationName: "reporter",
+  }),
+  reportedUser: one(users, {
+    fields: [reports.reportedUserId],
+    references: [users.id],
+    relationName: "reportedUser",
+  }),
+  reportedPost: one(posts, {
+    fields: [reports.reportedPostId],
+    references: [posts.id],
+  }),
+  reviewer: one(users, {
+    fields: [reports.reviewedBy],
+    references: [users.id],
+    relationName: "reviewer",
+  }),
+}));
+
+export const userBansRelations = relations(userBans, ({ one }) => ({
+  user: one(users, {
+    fields: [userBans.userId],
+    references: [users.id],
+    relationName: "bannedUser",
+  }),
+  bannedBy: one(users, {
+    fields: [userBans.bannedBy],
+    references: [users.id],
+    relationName: "banner",
+  }),
+}));
+
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -322,6 +388,17 @@ export const insertCommentSchema = createInsertSchema(comments).omit({
   createdAt: true,
 });
 
+export const insertReportSchema = createInsertSchema(reports).omit({
+  id: true,
+  createdAt: true,
+  reviewedAt: true,
+});
+
+export const insertUserBanSchema = createInsertSchema(userBans).omit({
+  id: true,
+  createdAt: true,
+});
+
 // Types
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
@@ -335,6 +412,10 @@ export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type Product = typeof products.$inferSelect;
 export type InsertComment = z.infer<typeof insertCommentSchema>;
 export type Comment = typeof comments.$inferSelect;
+export type InsertReport = z.infer<typeof insertReportSchema>;
+export type Report = typeof reports.$inferSelect;
+export type InsertUserBan = z.infer<typeof insertUserBanSchema>;
+export type UserBan = typeof userBans.$inferSelect;
 export type Like = typeof likes.$inferSelect;
 export type Follow = typeof follows.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;

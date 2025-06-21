@@ -9,6 +9,8 @@ import {
   follows,
   conversations,
   conversationParticipants,
+  reports,
+  userBans,
   type User,
   type UpsertUser,
   type InsertPost,
@@ -26,7 +28,7 @@ import {
   type Conversation,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, or, sql, count } from "drizzle-orm";
+import { eq, desc, and, or, sql, count, gte } from "drizzle-orm";
 
 export interface IStorage {
   // User operations (mandatory for Replit Auth)
@@ -66,6 +68,16 @@ export interface IStorage {
   unfollowUser(followerId: string, followingId: string): Promise<void>;
   isFollowing(followerId: string, followingId: string): Promise<boolean>;
   getUserStats(userId: string): Promise<{ posts: number; followers: number; following: number }>;
+  
+  // Admin operations
+  getAdminStats(): Promise<{ totalUsers: number; totalPosts: number; pendingReports: number; activeBans: number; recentActivity: number }>;
+  getReports(status?: string): Promise<any[]>;
+  createReport(report: any): Promise<any>;
+  reviewReport(reportId: number, reviewerId: string, action: string, actionTaken?: string): Promise<void>;
+  getBans(activeOnly?: boolean): Promise<any[]>;
+  createBan(ban: any): Promise<any>;
+  revokeBan(banId: number): Promise<void>;
+  isUserBanned(userId: string): Promise<boolean>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -381,6 +393,165 @@ export class DatabaseStorage implements IStorage {
       followers: followersCount.count,
       following: followingCount.count,
     };
+  }
+
+  // Admin operations
+  async getAdminStats(): Promise<{ totalUsers: number; totalPosts: number; pendingReports: number; activeBans: number; recentActivity: number }> {
+    const [usersCount] = await db.select({ count: count() }).from(users);
+    const [postsCount] = await db.select({ count: count() }).from(posts);
+    const [pendingReportsCount] = await db.select({ count: count() }).from(reports).where(eq(reports.status, "pending"));
+    const [activeBansCount] = await db.select({ count: count() }).from(userBans).where(eq(userBans.isActive, true));
+
+    const recentDate = new Date();
+    recentDate.setDate(recentDate.getDate() - 7);
+    const [recentActivityCount] = await db
+      .select({ count: count() })
+      .from(posts)
+      .where(gte(posts.createdAt, recentDate));
+
+    return {
+      totalUsers: usersCount.count,
+      totalPosts: postsCount.count,
+      pendingReports: pendingReportsCount.count,
+      activeBans: activeBansCount.count,
+      recentActivity: recentActivityCount.count,
+    };
+  }
+
+  async getReports(status?: string): Promise<any[]> {
+    let query = db
+      .select({
+        id: reports.id,
+        reporterId: reports.reporterId,
+        reportedUserId: reports.reportedUserId,
+        reportedPostId: reports.reportedPostId,
+        category: reports.category,
+        reason: reports.reason,
+        status: reports.status,
+        reviewedBy: reports.reviewedBy,
+        reviewedAt: reports.reviewedAt,
+        actionTaken: reports.actionTaken,
+        createdAt: reports.createdAt,
+      })
+      .from(reports);
+
+    if (status) {
+      query = query.where(eq(reports.status, status));
+    }
+
+    const results = await query.orderBy(desc(reports.createdAt));
+    
+    // Get user details for each report
+    const enrichedResults = await Promise.all(
+      results.map(async (report) => {
+        const [reporter, reportedUser] = await Promise.all([
+          this.getUser(report.reporterId),
+          report.reportedUserId ? this.getUser(report.reportedUserId) : null,
+        ]);
+        
+        return {
+          ...report,
+          reporter: reporter ? { username: reporter.username } : null,
+          reportedUser: reportedUser ? { username: reportedUser.username } : null,
+        };
+      })
+    );
+
+    return enrichedResults;
+  }
+
+  async createReport(reportData: any): Promise<any> {
+    const result = await db.insert(reports).values(reportData).returning();
+    return result[0];
+  }
+
+  async reviewReport(reportId: number, reviewerId: string, action: string, actionTaken?: string): Promise<void> {
+    await db
+      .update(reports)
+      .set({
+        status: action,
+        reviewedBy: reviewerId,
+        reviewedAt: new Date(),
+        actionTaken,
+      })
+      .where(eq(reports.id, reportId));
+  }
+
+  async getBans(activeOnly: boolean = false): Promise<any[]> {
+    let query = db
+      .select({
+        id: userBans.id,
+        userId: userBans.userId,
+        bannedBy: userBans.bannedBy,
+        reason: userBans.reason,
+        banType: userBans.banType,
+        durationHours: userBans.durationHours,
+        expiresAt: userBans.expiresAt,
+        isActive: userBans.isActive,
+        createdAt: userBans.createdAt,
+      })
+      .from(userBans);
+
+    if (activeOnly) {
+      query = query.where(eq(userBans.isActive, true));
+    }
+
+    const results = await query.orderBy(desc(userBans.createdAt));
+    
+    // Get user details for each ban
+    const enrichedResults = await Promise.all(
+      results.map(async (ban) => {
+        const [user, banner] = await Promise.all([
+          this.getUser(ban.userId),
+          this.getUser(ban.bannedBy),
+        ]);
+        return {
+          ...ban,
+          user: user ? { username: user.username } : null,
+          banner: banner ? { username: banner.username } : null,
+        };
+      })
+    );
+
+    return enrichedResults;
+  }
+
+  async createBan(banData: any): Promise<any> {
+    const ban = {
+      ...banData,
+      expiresAt: banData.banType === "temporary" && banData.durationHours 
+        ? new Date(Date.now() + banData.durationHours * 60 * 60 * 1000)
+        : null,
+    };
+    
+    const result = await db.insert(userBans).values(ban).returning();
+    return result[0];
+  }
+
+  async revokeBan(banId: number): Promise<void> {
+    await db
+      .update(userBans)
+      .set({ isActive: false })
+      .where(eq(userBans.id, banId));
+  }
+
+  async isUserBanned(userId: string): Promise<boolean> {
+    const result = await db
+      .select({ id: userBans.id })
+      .from(userBans)
+      .where(
+        and(
+          eq(userBans.userId, userId),
+          eq(userBans.isActive, true),
+          or(
+            eq(userBans.banType, "permanent"),
+            gte(userBans.expiresAt, new Date())
+          )
+        )
+      )
+      .limit(1);
+
+    return result.length > 0;
   }
 }
 

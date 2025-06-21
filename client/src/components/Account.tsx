@@ -10,13 +10,16 @@ import {
   LogOut, 
   Wallet,
   Plus,
-  CheckCircle
+  CheckCircle,
+  Shield
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useTheme } from "@/hooks/useTheme";
+import AdminPanel from "@/components/AdminPanel";
 
 export default function Account() {
   const { toast } = useToast();

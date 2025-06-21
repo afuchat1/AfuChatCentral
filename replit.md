@@ -115,6 +115,12 @@ AfuChat is a modern full-stack social commerce platform that combines social med
 ```
 Changelog:
 - June 21, 2025. Initial setup
+- June 21, 2025. Added comprehensive admin panel for moderation and platform abuse management
+  - Created reports system for content and user reporting
+  - Implemented user ban system with temporary and permanent bans
+  - Added admin-only routes with role-based access control
+  - Integrated admin panel into Account component for admin users
+  - Database tables: reports, user_bans with proper relations
 ```
 
 ## User Preferences

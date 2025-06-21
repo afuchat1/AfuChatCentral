@@ -250,6 +250,100 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin routes - protected by role check
+  const isAdmin = (req: any, res: any, next: any) => {
+    if (!req.user || req.user.claims.role !== 'admin') {
+      return res.status(403).json({ message: "Admin access required" });
+    }
+    next();
+  };
+
+  app.get('/api/admin/stats', isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const stats = await storage.getAdminStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching admin stats:", error);
+      res.status(500).json({ message: "Failed to fetch admin stats" });
+    }
+  });
+
+  app.get('/api/admin/reports', isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { status } = req.query;
+      const reports = await storage.getReports(status as string);
+      res.json(reports);
+    } catch (error) {
+      console.error("Error fetching reports:", error);
+      res.status(500).json({ message: "Failed to fetch reports" });
+    }
+  });
+
+  app.post('/api/admin/reports/:id/review', isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const reportId = parseInt(req.params.id);
+      const { action, actionTaken } = req.body;
+      const reviewerId = req.user.claims.sub;
+      
+      await storage.reviewReport(reportId, reviewerId, action, actionTaken);
+      res.json({ message: "Report reviewed successfully" });
+    } catch (error) {
+      console.error("Error reviewing report:", error);
+      res.status(500).json({ message: "Failed to review report" });
+    }
+  });
+
+  app.get('/api/admin/bans', isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const { activeOnly } = req.query;
+      const bans = await storage.getBans(activeOnly === 'true');
+      res.json(bans);
+    } catch (error) {
+      console.error("Error fetching bans:", error);
+      res.status(500).json({ message: "Failed to fetch bans" });
+    }
+  });
+
+  app.post('/api/admin/bans', isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const banData = {
+        ...req.body,
+        bannedBy: req.user.claims.sub,
+      };
+      const ban = await storage.createBan(banData);
+      res.json(ban);
+    } catch (error) {
+      console.error("Error creating ban:", error);
+      res.status(500).json({ message: "Failed to create ban" });
+    }
+  });
+
+  app.post('/api/admin/bans/:id/revoke', isAuthenticated, isAdmin, async (req: any, res) => {
+    try {
+      const banId = parseInt(req.params.id);
+      await storage.revokeBan(banId);
+      res.json({ message: "Ban revoked successfully" });
+    } catch (error) {
+      console.error("Error revoking ban:", error);
+      res.status(500).json({ message: "Failed to revoke ban" });
+    }
+  });
+
+  // Report creation endpoint for users
+  app.post('/api/reports', isAuthenticated, async (req: any, res) => {
+    try {
+      const reportData = {
+        ...req.body,
+        reporterId: req.user.claims.sub,
+      };
+      const report = await storage.createReport(reportData);
+      res.json(report);
+    } catch (error) {
+      console.error("Error creating report:", error);
+      res.status(500).json({ message: "Failed to create report" });
+    }
+  });
+
   // AfuAI mock routes
   app.post('/api/ai/chat', isAuthenticated, async (req: any, res) => {
     try {
