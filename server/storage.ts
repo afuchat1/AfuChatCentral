@@ -71,7 +71,7 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
-    return user;
+    return user || undefined;
   }
 
   async upsertUser(userData: UpsertUser): Promise<User> {
@@ -168,7 +168,11 @@ export class DatabaseStorage implements IStorage {
       .select({
         id: stories.id,
         userId: stories.userId,
-        imageUrl: stories.imageUrl,
+        content: stories.content,
+        mediaUrl: stories.mediaUrl,
+        mediaType: stories.mediaType,
+        backgroundColor: stories.backgroundColor,
+        viewsCount: stories.viewsCount,
         createdAt: stories.createdAt,
         expiresAt: stories.expiresAt,
         user: {

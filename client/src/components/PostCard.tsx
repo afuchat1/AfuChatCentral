@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Heart, MessageCircle, Share, Bookmark, MoreHorizontal, CheckCircle } from "lucide-react";
+import { Heart, MessageCircle, Share, Bookmark, MoreHorizontal, CheckCircle, Star, TrendingUp, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +22,7 @@ interface PostCardProps {
       username: string;
       profileImageUrl?: string;
       isVerified?: boolean;
+      isPremium?: boolean;
     };
   };
 }
@@ -85,6 +87,19 @@ export default function PostCard({ post }: PostCardProps) {
 
   return (
     <div className="bg-card border-b border-border">
+      {/* Sponsored Banner */}
+      {post.isSponsored && (
+        <div className="bg-gradient-to-r from-primary/10 to-secondary/10 px-4 py-2 border-b border-border">
+          <div className="flex items-center space-x-2">
+            <TrendingUp className="w-4 h-4 text-primary" />
+            <span className="text-sm font-medium text-primary">Sponsored Content</span>
+            <Badge variant="outline" className="text-xs">
+              Ad
+            </Badge>
+          </div>
+        </div>
+      )}
+
       {/* Post Header */}
       <div className="flex items-center justify-between p-4">
         <div className="flex items-center space-x-3">
@@ -94,15 +109,18 @@ export default function PostCard({ post }: PostCardProps) {
             className="w-10 h-10 rounded-full object-cover"
           />
           <div>
-            <div className="flex items-center space-x-1">
+            <div className="flex items-center space-x-2">
               <span className="font-semibold text-card-foreground">{post.user.username}</span>
-              {(post.user.isVerified || post.isSponsored) && (
-                <CheckCircle className="w-4 h-4 text-primary" />
+              {post.user.isVerified && (
+                <CheckCircle className="w-4 h-4 text-blue-500" />
               )}
-              {post.isSponsored && (
-                <span className="text-xs bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 px-2 py-1 rounded-full">
-                  Sponsored
-                </span>
+              {post.user.isPremium && (
+                <Star className="w-4 h-4 text-yellow-500" />
+              )}
+              {post.user.isPremium && (
+                <Badge variant="secondary" className="text-xs px-2 py-1 bg-gradient-to-r from-yellow-100 to-yellow-200 text-yellow-800">
+                  Premium
+                </Badge>
               )}
             </div>
             <span className="text-sm text-muted-foreground">
