@@ -36,7 +36,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// ✅ Add this route to show something at root
+// ✅ This must be outside of async to register before listen
 app.get("/", (_req, res) => {
   res.send("✅ AfuChat backend is live!");
 });
@@ -52,22 +52,22 @@ app.get("/", (_req, res) => {
     throw err;
   });
 
-  // Setup Vite dev server only in development
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
-    serveStatic(app);
+    // ✅ Comment this if no frontend built
+    // serveStatic(app);
   }
 
+  // ✅ Ensure you are listening correctly on port 5000
   const port = 5000;
   server.listen(
     {
       port,
-      host: "0.0.0.0",
-      reusePort: true,
+      host: "0.0.0.0", // this is important for Railway
     },
     () => {
-      log(`serving on port ${port}`);
+      log(`✅ Backend server is live on port ${port}`);
     }
   );
 })();
