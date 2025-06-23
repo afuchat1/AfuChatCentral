@@ -60,7 +60,7 @@ app.get("/", (_req, res) => {
   }
 
   // ✅ Ensure you are listening correctly on port 5000
-  const port = 5000;
+  const port = process.env.PORT || 5000;
   server.listen(
     {
       port,
